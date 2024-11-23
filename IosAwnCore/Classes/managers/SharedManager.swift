@@ -16,31 +16,22 @@ public class SharedManager {
 
     public init(tag: String) {
         self.tag = tag
-        self.serialQueue = DispatchQueue(label: "aw.sharedManager.\(tag)")
-        self._userDefaults = UserDefaults(
-            suiteName: Definitions.USER_DEFAULT_TAG
-        )
+        self.serialQueue = DispatchQueue(label: "com.awesomenotifications.sharedManager.\(tag)")
+        self._userDefaults = UserDefaults(suiteName: Definitions.USER_DEFAULT_TAG)
         self.objectList = [:]
 
         // Initial load should be done synchronously to ensure data is available
-        self.serialQueue.sync {
-            self.objectList = self._userDefaults?.dictionary(forKey: tag) ?? [:]
-        }
+        self.objectList = self._userDefaults?.dictionary(forKey: tag) ?? [:]
     }
 
     private func refreshObjects() {
-        serialQueue.sync {
-            self.objectList = self._userDefaults?.dictionary(forKey: tag) ?? [:]
-        }
+        objectList = _userDefaults?.dictionary(forKey: tag) ?? [:]
     }
 
     private func updateObjects() {
-        serialQueue.sync {
-            self._userDefaults?.removeObject(forKey: tag)
-            self._userDefaults?.setValue(objectList, forKey: tag)
-            self._userDefaults?
-                .synchronize()  // Ensure changes are written immediately
-        }
+        _userDefaults?.removeObject(forKey: tag)
+        _userDefaults?.setValue(objectList, forKey: tag)
+        _userDefaults?.synchronize()
     }
 
     public func get(referenceKey: String) -> [String: Any?]? {
@@ -51,8 +42,7 @@ public class SharedManager {
     }
 
     public func set(_ data: [String: Any?]?, referenceKey: String) {
-        guard !StringUtils.shared
-            .isNullOrEmpty(referenceKey) && data != nil else { return }
+        guard !StringUtils.shared.isNullOrEmpty(referenceKey) && data != nil else { return }
 
         serialQueue.sync {
             refreshObjects()
@@ -62,8 +52,7 @@ public class SharedManager {
     }
 
     public func remove(referenceKey: String) -> Bool {
-        guard !StringUtils.shared
-            .isNullOrEmpty(referenceKey) else { return false }
+        guard !StringUtils.shared.isNullOrEmpty(referenceKey) else { return false }
 
         return serialQueue.sync {
             refreshObjects()
