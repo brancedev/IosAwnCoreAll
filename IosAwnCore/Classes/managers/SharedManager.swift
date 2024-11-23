@@ -8,81 +8,106 @@
 import Foundation
 
 public class SharedManager {
-    
-    let _userDefaults = UserDefaults(suiteName: Definitions.USER_DEFAULT_TAG)
-    
-    let tag:String
-    var objectList:[String:Any?]    
-    
-    public init(tag:String){
+
+    private let serialQueue: DispatchQueue
+    private let _userDefaults: UserDefaults?
+    private let tag: String
+    private var objectList: [String: Any?]
+
+    public init(tag: String) {
         self.tag = tag
-        objectList = _userDefaults!.dictionary(forKey: tag) ?? [:]
+        self.serialQueue = DispatchQueue(label: "aw.sharedManager.\(tag)")
+        self._userDefaults = UserDefaults(
+            suiteName: Definitions.USER_DEFAULT_TAG
+        )
+        self.objectList = [:]
+
+        // Initial load should be done synchronously to ensure data is available
+        self.serialQueue.sync {
+            self.objectList = self._userDefaults?.dictionary(forKey: tag) ?? [:]
+        }
     }
-    
-    private let TAG:String = "SharedManager"
-    
-    private func refreshObjects(){
-        objectList = _userDefaults!.dictionary(forKey: tag) ?? [:]
+
+    private func refreshObjects() {
+        serialQueue.sync {
+            self.objectList = self._userDefaults?.dictionary(forKey: tag) ?? [:]
+        }
     }
-    
-    private func updateObjects(){
-        _userDefaults!.removeObject(forKey: tag)
-        _userDefaults!.setValue(objectList, forKey: tag)
-        refreshObjects()
+
+    private func updateObjects() {
+        serialQueue.sync {
+            self._userDefaults?.removeObject(forKey: tag)
+            self._userDefaults?.setValue(objectList, forKey: tag)
+            self._userDefaults?
+                .synchronize()  // Ensure changes are written immediately
+        }
     }
-    
-    public func get(referenceKey:String ) -> [String:Any?]? {
-        refreshObjects()
-        return objectList[referenceKey] as? [String:Any?]
+
+    public func get(referenceKey: String) -> [String: Any?]? {
+        return serialQueue.sync {
+            refreshObjects()
+            return objectList[referenceKey] as? [String: Any?]
+        }
     }
-    
-    public func set(_ data:[String:Any?]?, referenceKey:String) {
-        refreshObjects()
-        if(StringUtils.shared.isNullOrEmpty(referenceKey) || data == nil){ return }
-        objectList[referenceKey] = data!
-        updateObjects()
+
+    public func set(_ data: [String: Any?]?, referenceKey: String) {
+        guard !StringUtils.shared
+            .isNullOrEmpty(referenceKey) && data != nil else { return }
+
+        serialQueue.sync {
+            refreshObjects()
+            objectList[referenceKey] = data!
+            updateObjects()
+        }
     }
-    
-    public func remove(referenceKey:String) -> Bool {
-        refreshObjects()
-        if(StringUtils.shared.isNullOrEmpty(referenceKey)){ return false }
-        
-        objectList.removeValue(forKey: referenceKey)
-        updateObjects()
-        return true
+
+    public func remove(referenceKey: String) -> Bool {
+        guard !StringUtils.shared
+            .isNullOrEmpty(referenceKey) else { return false }
+
+        return serialQueue.sync {
+            refreshObjects()
+            objectList.removeValue(forKey: referenceKey)
+            updateObjects()
+            return true
+        }
     }
-    
+
     public func removeAll() {
-        refreshObjects()
-        objectList.removeAll()
-        updateObjects()
-    }
-    
-    public func getAllObjectsStarting(with keyFragment:String) -> [[String:Any?]] {
-        refreshObjects()
-        var returnedList:[[String:Any?]] = []
-        
-        for (key, data) in objectList {
-            if !key.starts(with: keyFragment) { continue }
-            if let dictionary:[String:Any?] = data as? [String:Any?] {
-                returnedList.append( dictionary )
-            }
+        serialQueue.sync {
+            objectList.removeAll()
+            updateObjects()
         }
-        
-        return returnedList
     }
-    
-    public func getAllObjects() -> [[String:Any?]] {
-        refreshObjects()
-        var returnedList:[[String:Any?]] = []
-        
-        for (_, data) in objectList {
-            if let dictionary:[String:Any?] = data as? [String:Any?] {
-                returnedList.append( dictionary )
+
+    public func getAllObjectsStarting(with keyFragment: String) -> [[String: Any?]] {
+        return serialQueue.sync {
+            refreshObjects()
+            var returnedList: [[String: Any?]] = []
+
+            for (key, data) in objectList {
+                if !key.starts(with: keyFragment) { continue }
+                if let dictionary = data as? [String: Any?] {
+                    returnedList.append(dictionary)
+                }
             }
+
+            return returnedList
         }
-        
-        return returnedList
     }
-    
+
+    public func getAllObjects() -> [[String: Any?]] {
+        return serialQueue.sync {
+            refreshObjects()
+            var returnedList: [[String: Any?]] = []
+
+            for (_, data) in objectList {
+                if let dictionary = data as? [String: Any?] {
+                    returnedList.append(dictionary)
+                }
+            }
+
+            return returnedList
+        }
+    }
 }
